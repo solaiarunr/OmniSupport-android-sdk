@@ -250,6 +250,13 @@ class OmniChatClient private constructor() {
         prefs?.edit()?.clear()?.apply()
     }
 
+    fun startNewConversation() {
+        stopPolling()
+        activeConversationId = null
+        currentSession?.conversationId = null
+        prefs?.edit()?.remove("session_data")?.apply()
+    }
+
     private fun persistSession() {
         currentSession?.let {
             val serialized = json.encodeToString(it)

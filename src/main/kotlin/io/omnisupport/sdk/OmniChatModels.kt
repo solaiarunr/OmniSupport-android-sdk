@@ -11,6 +11,14 @@ enum class OmniSenderType {
 }
 
 @Serializable
+enum class OmniMessageDeliveryStatus {
+    SENDING,
+    SENT,
+    DELIVERED,
+    READ
+}
+
+@Serializable
 data class OmniChatAppearance(
     val primaryColor: String? = null,
     val headerTextColor: String? = null,
@@ -18,7 +26,8 @@ data class OmniChatAppearance(
     val botName: String? = null,
     val launcherText: String? = null,
     val showPoweredBy: Boolean? = null,
-    val soundEnabled: Boolean? = null
+    val soundEnabled: Boolean? = null,
+    val greeting: String? = null
 )
 
 @Serializable
@@ -52,7 +61,8 @@ data class OmniChatMessage(
     val content: String,
     val isInternalNote: Boolean? = false,
     val createdAt: String = "",
-    val aiMetadata: OmniChatAIMetadata? = null
+    val aiMetadata: OmniChatAIMetadata? = null,
+    var deliveryStatus: OmniMessageDeliveryStatus? = null
 )
 
 @Serializable

@@ -1,15 +1,23 @@
 package io.omnisupport.sdk
 
+import android.app.AlertDialog
+import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     private val client = OmniChatClient.instance
@@ -19,7 +27,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     private lateinit var adapter: MessageAdapter
     private lateinit var recyclerView: RecyclerView
     private lateinit var inputEditText: EditText
-    private lateinit var sendButton: Button
+    private lateinit var sendButton: TextView
     private lateinit var headerTitle: TextView
     private lateinit var headerSubtitle: TextView
     private lateinit var progressBar: ProgressBar
@@ -40,6 +48,42 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         scope.cancel()
     }
 
+    private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        currentFocus?.let { imm?.hideSoftInputFromWindow(it.windowToken, 0) }
+    }
+
+    private fun createRoundedDrawable(bgColor: Int, cornerRadiusDp: Float, strokeColor: Int = 0, strokeWidthDp: Int = 0): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(bgColor)
+            cornerRadius = cornerRadiusDp * resources.displayMetrics.density
+            if (strokeWidthDp > 0) {
+                setStroke((strokeWidthDp * resources.displayMetrics.density).toInt(), strokeColor)
+            }
+        }
+    }
+
+    private fun createBubbleDrawable(bgColor: Int, isCustomer: Boolean, strokeColor: Int = 0, strokeWidthDp: Int = 0): GradientDrawable {
+        val r = 16f * resources.displayMetrics.density
+        val tail = 4f * resources.displayMetrics.density
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(bgColor)
+            // 8 radii: top-left (x,y), top-right (x,y), bottom-right (x,y), bottom-left (x,y)
+            cornerRadii = if (isCustomer) {
+                floatArrayOf(r, r, r, r, tail, tail, r, r)
+            } else {
+                floatArrayOf(tail, tail, r, r, r, r, r, r)
+            }
+            if (strokeWidthDp > 0) {
+                setStroke((strokeWidthDp * resources.displayMetrics.density).toInt(), strokeColor)
+            }
+        }
+    }
+
     private fun createViewHierarchy(): View {
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -50,13 +94,15 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         // Header
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor(client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"))
-            setPadding(32, 40, 32, 24)
+            val brandColor = client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"
+            setBackgroundColor(Color.parseColor(brandColor))
+            setPadding(dp(16f), dp(16f), dp(16f), dp(12f))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
@@ -69,25 +115,36 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
             text = client.currentConfig?.companyName ?: "Customer Support"
             setTextColor(Color.WHITE)
             textSize = 17f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            typeface = Typeface.DEFAULT_BOLD
         }
         headerSubtitle = TextView(this).apply {
-            text = "● ${client.currentConfig?.appearance?.botName ?: "AI Assistant"}"
+            text = "● ${client.currentConfig?.appearance?.botName ?: "AI Assistant"} • Online"
             setTextColor(Color.parseColor("#E0E7FF"))
             textSize = 12f
         }
         titleContainer.addView(headerTitle)
         titleContainer.addView(headerSubtitle)
 
+        // New Chat Compose Button
+        val composeBtn = TextView(this).apply {
+            text = "✏️"
+            textSize = 16f
+            setPadding(dp(8f), dp(6f), dp(8f), dp(6f))
+            setOnClickListener { promptNewChat() }
+        }
+
+        // Close Button
         val closeBtn = TextView(this).apply {
             text = "✕"
             setTextColor(Color.WHITE)
             textSize = 18f
-            setPadding(16, 0, 8, 0)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(12f), dp(6f), dp(4f), dp(6f))
             setOnClickListener { finish() }
         }
 
         topRow.addView(titleContainer)
+        topRow.addView(composeBtn)
         topRow.addView(closeBtn)
         header.addView(topRow)
         rootLayout.addView(header)
@@ -96,7 +153,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             isIndeterminate = true
             visibility = View.GONE
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 8)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4f))
         }
         rootLayout.addView(progressBar)
 
@@ -104,8 +161,12 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         recyclerView = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@OmniChatActivity).apply { stackFromEnd = true }
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f)
-            setPadding(16, 16, 16, 16)
+            setPadding(dp(12f), dp(10f), dp(12f), dp(10f))
             clipToPadding = false
+            setOnTouchListener { _, _ ->
+                hideKeyboard()
+                false
+            }
         }
         adapter = MessageAdapter(messages)
         recyclerView.adapter = adapter
@@ -115,14 +176,16 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         val actionBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor("#F1F5F9"))
-            setPadding(24, 12, 24, 12)
+            setPadding(dp(12f), dp(6f), dp(12f), dp(6f))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
         val escalateBtn = Button(this).apply {
             text = "🎧 Request Human Agent"
             textSize = 11f
-            setBackgroundColor(Color.parseColor("#E2E8F0"))
+            setTextColor(Color.parseColor("#475569"))
+            background = createRoundedDrawable(Color.parseColor("#E2E8F0"), 8f)
+            setPadding(dp(12f), dp(6f), dp(12f), dp(6f))
             setOnClickListener { handleEscalate() }
         }
         actionBar.addView(escalateBtn)
@@ -131,25 +194,43 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         // Bottom Input Row
         val inputRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.WHITE)
-            setPadding(24, 16, 24, 16)
+            setPadding(dp(12f), dp(10f), dp(12f), dp(10f))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
+        // Growing dynamic multiline EditText
         inputEditText = EditText(this).apply {
-            hint = "Type your message..."
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f)
-            setBackgroundColor(Color.parseColor("#F1F5F9"))
-            setPadding(24, 16, 24, 16)
-            textSize = 14f
+            hint = "Type a message..."
+            setHintTextColor(Color.parseColor("#94A3B8"))
+            setTextColor(Color.parseColor("#0F172A"))
+            textSize = 15f
+            minLines = 1
+            maxLines = 5
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            background = createRoundedDrawable(Color.parseColor("#F1F5F9"), 20f, Color.parseColor("#E2E8F0"), 1)
+            setPadding(dp(14f), dp(10f), dp(14f), dp(10f))
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            }
         }
 
-        sendButton = Button(this).apply {
+        // WhatsApp-style emerald teal circular send button
+        sendButton = TextView(this).apply {
             text = "➔"
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor(client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = 16
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            rotation = 45f // Angled arrow WhatsApp style
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#0BA37F")) // WhatsApp emerald teal
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(40f), dp(40f)).apply {
+                leftMargin = dp(10f)
+                gravity = Gravity.CENTER_VERTICAL
             }
             setOnClickListener { handleSend() }
         }
@@ -161,26 +242,97 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         return rootLayout
     }
 
+    private fun promptNewChat() {
+        AlertDialog.Builder(this)
+            .setTitle("Start New Chat?")
+            .setMessage("This will start a fresh conversation with support for a new inquiry.")
+            .setPositiveButton("Start New Chat") { _, _ -> startFreshChat() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    fun startFreshChat() {
+        client.startNewConversation()
+        val greeting = client.currentConfig?.greetingMessage
+            ?: client.currentConfig?.welcomeMessage
+            ?: client.currentConfig?.appearance?.greeting
+            ?: "Hello! How can we help you today?"
+        val welcome = OmniChatMessage(
+            id = "welcome_${System.currentTimeMillis()}",
+            conversationId = "",
+            senderType = OmniSenderType.AI,
+            senderName = client.currentConfig?.appearance?.botName ?: "AI Assistant",
+            content = greeting,
+            createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
+        )
+        messages.clear()
+        messages.add(welcome)
+        adapter.notifyDataSetChanged()
+        inputEditText.setText("")
+    }
+
+    private fun applyDeliveryStatuses() {
+        var hasAgentReplyAfter = false
+        for (i in messages.indices.reversed()) {
+            val msg = messages[i]
+            if (msg.senderType == OmniSenderType.AGENT || msg.senderType == OmniSenderType.AI) {
+                hasAgentReplyAfter = true
+            } else if (msg.senderType == OmniSenderType.CUSTOMER) {
+                if (msg.id.startsWith("local_") && msg.deliveryStatus == OmniMessageDeliveryStatus.SENT) {
+                    continue
+                }
+                msg.deliveryStatus = if (hasAgentReplyAfter) OmniMessageDeliveryStatus.READ else OmniMessageDeliveryStatus.DELIVERED
+            }
+        }
+    }
+
     private fun loadInitialData() {
         progressBar.visibility = View.VISIBLE
         scope.launch {
             try {
                 val config = client.fetchConfig()
                 headerTitle.text = config.companyName ?: "Customer Support"
-                headerSubtitle.text = "● ${config.appearance?.botName ?: "AI Assistant"}"
+                headerSubtitle.text = "● ${config.appearance?.botName ?: "AI Assistant"} • Online"
 
-                client.activeConversationId?.let { convId ->
-                    val history = client.fetchMessages(convId)
-                    messages.clear()
-                    messages.addAll(history)
-                    adapter.notifyDataSetChanged()
-                    recyclerView.scrollToPosition(messages.size - 1)
+                val activeId = client.activeConversationId
+                if (!activeId.isNullOrBlank()) {
+                    val history = client.fetchMessages(activeId)
+                    if (history.isNotEmpty()) {
+                        messages.clear()
+                        messages.addAll(history)
+                        applyDeliveryStatuses()
+                        adapter.notifyDataSetChanged()
+                        recyclerView.scrollToPosition(messages.size - 1)
+                    } else {
+                        showWelcomeFallback()
+                    }
+                } else {
+                    showWelcomeFallback()
                 }
             } catch (e: Exception) {
-                // handle error
+                showWelcomeFallback()
             } finally {
                 progressBar.visibility = View.GONE
             }
+        }
+    }
+
+    private fun showWelcomeFallback() {
+        if (messages.isEmpty()) {
+            val greeting = client.currentConfig?.greetingMessage
+                ?: client.currentConfig?.welcomeMessage
+                ?: client.currentConfig?.appearance?.greeting
+                ?: "Hello! How can we help you today?"
+            val welcome = OmniChatMessage(
+                id = "welcome_init",
+                conversationId = "",
+                senderType = OmniSenderType.AI,
+                senderName = client.currentConfig?.appearance?.botName ?: "AI Assistant",
+                content = greeting,
+                createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
+            )
+            messages.add(welcome)
+            adapter.notifyDataSetChanged()
         }
     }
 
@@ -189,26 +341,46 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         if (text.isEmpty()) return
         inputEditText.setText("")
 
+        val localId = "local_${System.currentTimeMillis()}"
         val localMsg = OmniChatMessage(
-            id = "local_${System.currentTimeMillis()}",
+            id = localId,
             conversationId = client.activeConversationId ?: "",
             senderType = OmniSenderType.CUSTOMER,
             senderName = "You",
-            content = text
+            content = text,
+            createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date()),
+            deliveryStatus = OmniMessageDeliveryStatus.SENT // WhatsApp Single Tick!
         )
         messages.add(localMsg)
         adapter.notifyItemInserted(messages.size - 1)
         recyclerView.scrollToPosition(messages.size - 1)
 
+        val sendStart = System.currentTimeMillis()
         scope.launch {
             try {
                 client.sendMessage(text)
+
+                // Natural WhatsApp single-to-double tick progression timing (~350ms)
+                val elapsed = System.currentTimeMillis() - sendStart
+                if (elapsed < 350) {
+                    delay(350 - elapsed)
+                }
+
+                val idx = messages.indexOfFirst { it.id == localId }
+                if (idx != -1) {
+                    messages[idx].deliveryStatus = OmniMessageDeliveryStatus.DELIVERED // WhatsApp Double Tick!
+                    adapter.notifyItemChanged(idx)
+                }
+
                 client.activeConversationId?.let { convId ->
                     val fresh = client.fetchMessages(convId)
-                    messages.clear()
-                    messages.addAll(fresh)
-                    adapter.notifyDataSetChanged()
-                    recyclerView.scrollToPosition(messages.size - 1)
+                    if (fresh.isNotEmpty()) {
+                        messages.clear()
+                        messages.addAll(fresh)
+                        applyDeliveryStatuses()
+                        adapter.notifyDataSetChanged()
+                        recyclerView.scrollToPosition(messages.size - 1)
+                    }
                 }
             } catch (e: Exception) {
                 Toast.makeText(this@OmniChatActivity, "Send failed", Toast.LENGTH_SHORT).show()
@@ -225,7 +397,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
                     conversationId = client.activeConversationId ?: "",
                     senderType = OmniSenderType.SYSTEM,
                     senderName = "System",
-                    content = "Your inquiry has been escalated to a live support agent."
+                    content = "🎧 Your inquiry has been routed to a human support specialist. A live agent will join shortly."
                 )
                 messages.add(systemMsg)
                 adapter.notifyItemInserted(messages.size - 1)
@@ -239,68 +411,255 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     override fun onNewMessage(message: OmniChatMessage) {
         if (!messages.any { it.id == message.id }) {
             messages.add(message)
-            adapter.notifyItemInserted(messages.size - 1)
+            applyDeliveryStatuses() // Marks previous customer messages as READ (double blue tick)!
+            adapter.notifyDataSetChanged()
             recyclerView.scrollToPosition(messages.size - 1)
         }
     }
 
     override fun onTypingChanged(isTyping: Boolean, senderName: String) {
-        headerSubtitle.text = if (isTyping) "$senderName is typing..." else "● ${client.currentConfig?.appearance?.botName ?: "AI Assistant"}"
+        headerSubtitle.text = if (isTyping) "$senderName is typing..." else "● ${client.currentConfig?.appearance?.botName ?: "AI Assistant"} • Online"
     }
 
     override fun onStatusChanged(status: String) {
         // Status updated
     }
 
-    // Message Adapter
-    inner class MessageAdapter(private val list: List<OmniChatMessage>) : RecyclerView.Adapter<MessageViewHolder>() {
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-            val tv = TextView(parent.context).apply {
-                setPadding(24, 16, 24, 16)
-                textSize = 14f
+    private fun formatTimestamp(isoStr: String): String {
+        if (isoStr.isBlank()) return ""
+        val date = parseIsoDate(isoStr) ?: return ""
+        return SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
+    }
+
+    private fun formatDateHeader(isoStr: String): String {
+        val date = parseIsoDate(isoStr) ?: return ""
+        val cal1 = Calendar.getInstance().apply { time = date }
+        val cal2 = Calendar.getInstance()
+        return if (cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+        ) {
+            "Today"
+        } else {
+            cal2.add(Calendar.DAY_OF_YEAR, -1)
+            if (cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+                cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+            ) {
+                "Yesterday"
+            } else {
+                SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(date)
             }
-            return MessageViewHolder(tv)
+        }
+    }
+
+    private fun parseIsoDate(isoStr: String): Date? {
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd HH:mm:ss"
+        )
+        for (f in formats) {
+            try {
+                val sdf = SimpleDateFormat(f, Locale.US).apply {
+                    if (f.endsWith("'Z'") || f.endsWith("Z")) timeZone = TimeZone.getTimeZone("UTC")
+                }
+                return sdf.parse(isoStr)
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    // Message Adapter with WhatsApp Ticks and Content-based Bubbles
+    inner class MessageAdapter(private val list: List<OmniChatMessage>) : RecyclerView.Adapter<MessageViewHolder>() {
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
+            val root = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+
+            // Date Header badge
+            val dateHeader = TextView(parent.context).apply {
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#64748B"))
+                background = createRoundedDrawable(Color.parseColor("#E2E8F0"), 10f)
+                setPadding(dp(12f), dp(4f), dp(12f), dp(4f))
+                val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    topMargin = dp(8f)
+                    bottomMargin = dp(8f)
+                }
+                layoutParams = lp
+            }
+            root.addView(dateHeader)
+
+            // Bubble container (outer row)
+            val bubbleRow = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = dp(2f)
+                    bottomMargin = dp(2f)
+                }
+            }
+
+            // Avatar for receiver
+            val avatarView = TextView(parent.context).apply {
+                textSize = 14f
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(28f), dp(28f)).apply {
+                    rightMargin = dp(6f)
+                    gravity = Gravity.TOP
+                }
+            }
+            bubbleRow.addView(avatarView)
+
+            // Main Bubble card (Content-based width, max 80% screen)
+            val bubbleCard = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12f), dp(8f), dp(12f), dp(6f))
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+
+            val senderNameLabel = TextView(parent.context).apply {
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#64748B"))
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(2f)
+                }
+            }
+            bubbleCard.addView(senderNameLabel)
+
+            val messageText = TextView(parent.context).apply {
+                textSize = 15f
+                setTextColor(Color.BLACK)
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            bubbleCard.addView(messageText)
+
+            // Footer row: Timestamp + WhatsApp ticks
+            val footerRow = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.END
+                    topMargin = dp(2f)
+                }
+            }
+
+            val timeLabel = TextView(parent.context).apply {
+                textSize = 10f
+            }
+            footerRow.addView(timeLabel)
+
+            val tickLabel = TextView(parent.context).apply {
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    leftMargin = dp(4f)
+                }
+            }
+            footerRow.addView(tickLabel)
+            bubbleCard.addView(footerRow)
+
+            bubbleRow.addView(bubbleCard)
+            root.addView(bubbleRow)
+
+            return MessageViewHolder(root, dateHeader, bubbleRow, avatarView, bubbleCard, senderNameLabel, messageText, timeLabel, tickLabel)
         }
 
         override fun getItemCount() = list.size
 
         override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
             val item = list[position]
-            val tv = holder.itemView as TextView
-            tv.text = item.content
+            val timeStr = formatTimestamp(item.createdAt)
+            holder.messageText.text = item.content
+            holder.timeLabel.text = timeStr
 
-            val params = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 8
-                bottomMargin = 8
+            // Check date header visibility
+            val currentDate = if (item.createdAt.isNotBlank()) formatDateHeader(item.createdAt) else ""
+            val prevDate = if (position > 0 && list[position - 1].createdAt.isNotBlank()) formatDateHeader(list[position - 1].createdAt) else ""
+            if (currentDate.isNotBlank() && (position == 0 || currentDate != prevDate)) {
+                holder.dateHeader.visibility = View.VISIBLE
+                holder.dateHeader.text = currentDate
+            } else {
+                holder.dateHeader.visibility = View.GONE
             }
 
             when (item.senderType) {
                 OmniSenderType.CUSTOMER -> {
-                    params.gravity = Gravity.END
-                    params.leftMargin = 100
-                    params.rightMargin = 0
-                    tv.setBackgroundColor(Color.parseColor(client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"))
-                    tv.setTextColor(Color.WHITE)
+                    holder.bubbleRow.gravity = Gravity.END
+                    holder.avatarView.visibility = View.GONE
+                    holder.senderNameLabel.visibility = View.GONE
+
+                    val primary = client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"
+                    holder.bubbleCard.background = createBubbleDrawable(Color.parseColor(primary), isCustomer = true)
+                    holder.messageText.setTextColor(Color.WHITE)
+                    holder.timeLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
+
+                    // WhatsApp Ticks (Single -> Double -> Double Blue)
+                    holder.tickLabel.visibility = View.VISIBLE
+                    val status = item.deliveryStatus ?: OmniMessageDeliveryStatus.DELIVERED
+                    when (status) {
+                        OmniMessageDeliveryStatus.SENDING, OmniMessageDeliveryStatus.SENT -> {
+                            holder.tickLabel.text = "✓"
+                            holder.tickLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
+                        }
+                        OmniMessageDeliveryStatus.DELIVERED -> {
+                            holder.tickLabel.text = "✓✓"
+                            holder.tickLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
+                        }
+                        OmniMessageDeliveryStatus.READ -> {
+                            holder.tickLabel.text = "✓✓"
+                            holder.tickLabel.setTextColor(Color.parseColor("#34B7F1")) // WhatsApp Cyan Blue
+                        }
+                    }
                 }
                 OmniSenderType.AGENT, OmniSenderType.AI -> {
-                    params.gravity = Gravity.START
-                    params.rightMargin = 100
-                    params.leftMargin = 0
-                    tv.setBackgroundColor(Color.WHITE)
-                    tv.setTextColor(Color.parseColor("#1E293B"))
+                    holder.bubbleRow.gravity = Gravity.START
+                    holder.avatarView.visibility = View.VISIBLE
+                    holder.senderNameLabel.visibility = View.VISIBLE
+
+                    val isAi = item.senderType == OmniSenderType.AI
+                    holder.avatarView.text = if (isAi) "🤖" else "🎧"
+                    holder.avatarView.background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(Color.parseColor(if (isAi) "#EDE9FE" else "#DCFCE7"))
+                    }
+
+                    holder.senderNameLabel.text = item.senderName.ifEmpty { if (isAi) "AI Assistant" else "Support Team" }
+                    holder.senderNameLabel.setTextColor(Color.parseColor(if (isAi) "#7C3AED" else "#059669"))
+
+                    holder.bubbleCard.background = createBubbleDrawable(Color.WHITE, isCustomer = false, strokeColor = Color.parseColor("#E2E8F0"), strokeWidthDp = 1)
+                    holder.messageText.setTextColor(Color.parseColor("#0F172A"))
+                    holder.timeLabel.setTextColor(Color.parseColor("#94A3B8"))
+                    holder.tickLabel.visibility = View.GONE
                 }
                 OmniSenderType.SYSTEM -> {
-                    params.gravity = Gravity.CENTER_HORIZONTAL
-                    tv.setBackgroundColor(Color.parseColor("#EFF6FF"))
-                    tv.setTextColor(Color.parseColor("#2563EB"))
+                    holder.bubbleRow.gravity = Gravity.CENTER_HORIZONTAL
+                    holder.avatarView.visibility = View.GONE
+                    holder.senderNameLabel.visibility = View.GONE
+                    holder.tickLabel.visibility = View.GONE
+
+                    holder.bubbleCard.background = createRoundedDrawable(Color.parseColor("#FEF3C7"), 12f, Color.parseColor("#FDE68A"), 1)
+                    holder.messageText.setTextColor(Color.parseColor("#B45309"))
+                    holder.timeLabel.setTextColor(Color.parseColor("#D97706"))
                 }
             }
-            tv.layoutParams = params
         }
     }
 
-    inner class MessageViewHolder(view: View) : RecyclerView.ViewHolder(view)
+    inner class MessageViewHolder(
+        view: View,
+        val dateHeader: TextView,
+        val bubbleRow: LinearLayout,
+        val avatarView: TextView,
+        val bubbleCard: LinearLayout,
+        val senderNameLabel: TextView,
+        val messageText: TextView,
+        val timeLabel: TextView,
+        val tickLabel: TextView
+    ) : RecyclerView.ViewHolder(view)
 }

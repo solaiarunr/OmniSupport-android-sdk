@@ -27,4 +27,11 @@ object OmniChatSDK {
     fun resetSession() {
         OmniChatClient.instance.resetSession()
     }
+
+    /**
+     * Clears active conversation to allow starting a fresh chat inquiry.
+     */
+    fun startNewChat() {
+        OmniChatClient.instance.startNewConversation()
+    }
 }
