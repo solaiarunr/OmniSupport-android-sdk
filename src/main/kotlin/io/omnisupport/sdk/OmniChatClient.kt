@@ -13,6 +13,7 @@ import java.io.IOException
 
 interface OmniChatListener {
     fun onNewMessage(message: OmniChatMessage)
+    fun onMessagesSynced(messages: List<OmniChatMessage>) {}
     fun onTypingChanged(isTyping: Boolean, senderName: String)
     fun onStatusChanged(status: String)
 }
@@ -226,8 +227,9 @@ class OmniChatClient private constructor() {
                 delay(3500)
                 try {
                     val messages = fetchMessages(conversationId)
-                    messages.lastOrNull()?.let { lastMsg ->
-                        withContext(Dispatchers.Main) {
+                    withContext(Dispatchers.Main) {
+                        listeners.forEach { it.onMessagesSynced(messages) }
+                        messages.lastOrNull()?.let { lastMsg ->
                             listeners.forEach { it.onNewMessage(lastMsg) }
                         }
                     }

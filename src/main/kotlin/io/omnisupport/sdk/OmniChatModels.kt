@@ -60,6 +60,7 @@ data class OmniChatMessage(
     val senderName: String,
     val content: String,
     val isInternalNote: Boolean? = false,
+    val isRead: Boolean? = false,
     val createdAt: String = "",
     val aiMetadata: OmniChatAIMetadata? = null,
     var deliveryStatus: OmniMessageDeliveryStatus? = null

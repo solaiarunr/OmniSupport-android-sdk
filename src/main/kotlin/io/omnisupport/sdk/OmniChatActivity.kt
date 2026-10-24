@@ -272,16 +272,16 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     }
 
     private fun applyDeliveryStatuses() {
-        var hasAgentReplyAfter = false
-        for (i in messages.indices.reversed()) {
-            val msg = messages[i]
-            if (msg.senderType == OmniSenderType.AGENT || msg.senderType == OmniSenderType.AI) {
-                hasAgentReplyAfter = true
-            } else if (msg.senderType == OmniSenderType.CUSTOMER) {
+        for (msg in messages) {
+            if (msg.senderType == OmniSenderType.CUSTOMER) {
                 if (msg.id.startsWith("local_") && msg.deliveryStatus == OmniMessageDeliveryStatus.SENT) {
                     continue
                 }
-                msg.deliveryStatus = if (hasAgentReplyAfter) OmniMessageDeliveryStatus.READ else OmniMessageDeliveryStatus.DELIVERED
+                if (msg.isRead == true || msg.deliveryStatus == OmniMessageDeliveryStatus.READ) {
+                    msg.deliveryStatus = OmniMessageDeliveryStatus.READ
+                } else {
+                    msg.deliveryStatus = OmniMessageDeliveryStatus.DELIVERED
+                }
             }
         }
     }
@@ -411,9 +411,31 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     override fun onNewMessage(message: OmniChatMessage) {
         if (!messages.any { it.id == message.id }) {
             messages.add(message)
-            applyDeliveryStatuses() // Marks previous customer messages as READ (double blue tick)!
+            applyDeliveryStatuses()
             adapter.notifyDataSetChanged()
             recyclerView.scrollToPosition(messages.size - 1)
+        }
+    }
+
+    override fun onMessagesSynced(syncedMessages: List<OmniChatMessage>) {
+        var needsReload = false
+        for (serverMsg in syncedMessages) {
+            val existing = messages.find { it.id == serverMsg.id }
+            if (existing != null) {
+                val newStatus = serverMsg.deliveryStatus ?: if (serverMsg.isRead == true) OmniMessageDeliveryStatus.READ else OmniMessageDeliveryStatus.DELIVERED
+                if (existing.deliveryStatus != newStatus || existing.isRead != serverMsg.isRead) {
+                    existing.deliveryStatus = newStatus
+                    if (serverMsg.isRead != null) existing.isRead = serverMsg.isRead
+                    needsReload = true
+                }
+            } else {
+                messages.add(serverMsg)
+                needsReload = true
+            }
+        }
+        if (needsReload) {
+            applyDeliveryStatuses()
+            adapter.notifyDataSetChanged()
         }
     }
 
