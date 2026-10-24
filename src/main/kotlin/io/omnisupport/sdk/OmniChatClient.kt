@@ -159,6 +159,12 @@ class OmniChatClient private constructor() {
             .build()
 
         val response = httpClient.newCall(request).execute()
+        if (response.code == 404) {
+            activeConversationId = null
+            saveSession()
+            stopPolling()
+            return@withContext emptyList()
+        }
         if (!response.isSuccessful) return@withContext emptyList()
 
         val body = response.body?.string() ?: return@withContext emptyList()
@@ -188,14 +194,32 @@ class OmniChatClient private constructor() {
             .build()
 
         val response = httpClient.newCall(request).execute()
+        if (response.code == 404) {
+            activeConversationId = null
+            saveSession()
+            val newId = createConversation(content)
+            return@withContext OmniChatMessage(
+                id = "msg_${System.currentTimeMillis()}",
+                conversationId = newId,
+                senderType = OmniSenderType.CUSTOMER,
+                senderName = "You",
+                content = content,
+                deliveryStatus = OmniMessageDeliveryStatus.DELIVERED
+            )
+        }
         if (!response.isSuccessful) throw IOException("Failed to send message")
 
         val body = response.body?.string() ?: throw IOException("Empty body")
         @kotlinx.serialization.Serializable
-        data class SingleMsgWrapper(val success: Boolean, val data: OmniChatMessage)
+        data class SingleMsgWrapper(val success: Boolean, val data: OmniChatMessage, val conversationId: String? = null)
 
         val decoded = json.decodeFromString<SingleMsgWrapper>(body)
-        startPolling(targetId)
+        val finalConvId = decoded.conversationId ?: targetId
+        if (finalConvId != targetId) {
+            activeConversationId = finalConvId
+            saveSession()
+        }
+        startPolling(finalConvId)
         decoded.data
     }
 
