@@ -31,6 +31,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     private lateinit var headerTitle: TextView
     private lateinit var headerSubtitle: TextView
     private lateinit var progressBar: ProgressBar
+    private var actionBarLayout: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -179,6 +180,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
             setPadding(dp(12f), dp(6f), dp(12f), dp(6f))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
+        this.actionBarLayout = actionBar
 
         val escalateBtn = Button(this).apply {
             text = "🎧 Request Human Agent"
@@ -303,6 +305,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
                         applyDeliveryStatuses()
                         adapter.notifyDataSetChanged()
                         recyclerView.scrollToPosition(messages.size - 1)
+                        updateEscalateButtonVisibility()
                     } else {
                         showWelcomeFallback()
                     }
@@ -392,6 +395,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         scope.launch {
             try {
                 client.escalate()
+                actionBarLayout?.visibility = View.GONE
                 val systemMsg = OmniChatMessage(
                     id = "sys_${System.currentTimeMillis()}",
                     conversationId = client.activeConversationId ?: "",
@@ -408,6 +412,11 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         }
     }
 
+    private fun updateEscalateButtonVisibility() {
+        val hasAgent = messages.any { it.senderType == OmniSenderType.AGENT }
+        actionBarLayout?.visibility = if (hasAgent) View.GONE else View.VISIBLE
+    }
+
     override fun onNewMessage(message: OmniChatMessage) {
         if (message.isInternalNote == true) return
         if (!messages.any { it.id == message.id }) {
@@ -415,6 +424,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
             applyDeliveryStatuses()
             adapter.notifyDataSetChanged()
             recyclerView.scrollToPosition(messages.size - 1)
+            updateEscalateButtonVisibility()
         }
     }
 
@@ -438,6 +448,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         if (needsReload) {
             applyDeliveryStatuses()
             adapter.notifyDataSetChanged()
+            updateEscalateButtonVisibility()
         }
     }
 
