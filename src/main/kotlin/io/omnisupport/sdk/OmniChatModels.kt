@@ -81,3 +81,12 @@ data class OmniChatSession(
     val visitorName: String? = null,
     var conversationId: String? = null
 )
+
+@Serializable
+data class OmniChatConversationDetail(
+    val id: String,
+    val ticketNumber: String? = null,
+    val status: String? = null,
+    val isEscalated: Boolean? = null,
+    val assignedAgentId: String? = null
+)

@@ -32,6 +32,8 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     private lateinit var headerSubtitle: TextView
     private lateinit var progressBar: ProgressBar
     private var actionBarLayout: LinearLayout? = null
+    private var isEscalated: Boolean = false
+    private var isHumanAssigned: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -255,6 +257,8 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
 
     fun startFreshChat() {
         client.startNewConversation()
+        isEscalated = false
+        isHumanAssigned = false
         val greeting = client.currentConfig?.greetingMessage
             ?: client.currentConfig?.welcomeMessage
             ?: client.currentConfig?.appearance?.greeting
@@ -271,6 +275,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         messages.add(welcome)
         adapter.notifyDataSetChanged()
         inputEditText.setText("")
+        updateEscalateButtonVisibility()
     }
 
     private fun applyDeliveryStatuses() {
@@ -309,6 +314,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
                     } else {
                         showWelcomeFallback()
                     }
+                    checkAssignedAgent(activeId)
                 } else {
                     showWelcomeFallback()
                 }
@@ -395,7 +401,8 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         scope.launch {
             try {
                 client.escalate()
-                actionBarLayout?.visibility = View.GONE
+                isEscalated = true
+                updateEscalateButtonVisibility()
                 val systemMsg = OmniChatMessage(
                     id = "sys_${System.currentTimeMillis()}",
                     conversationId = client.activeConversationId ?: "",
@@ -413,8 +420,42 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     }
 
     private fun updateEscalateButtonVisibility() {
-        val hasAgent = messages.any { it.senderType == OmniSenderType.AGENT }
-        actionBarLayout?.visibility = if (hasAgent) View.GONE else View.VISIBLE
+        if (isEscalated || isHumanAssigned) {
+            actionBarLayout?.visibility = View.GONE
+            return
+        }
+        val hasAssignedAgent = messages.any { msg ->
+            val isCompanyAdmin = msg.senderRole == "COMPANY_ADMIN" || msg.senderTitle == "Company Administrator"
+            if (isCompanyAdmin) {
+                false
+            } else {
+                msg.senderRole == "AGENT" ||
+                (msg.senderType == OmniSenderType.SYSTEM && msg.content.contains("Support specialist") && msg.content.contains("has joined"))
+            }
+        }
+        actionBarLayout?.visibility = if (hasAssignedAgent) View.GONE else View.VISIBLE
+    }
+
+    private fun checkAssignedAgent(conversationId: String) {
+        if (isHumanAssigned) return
+        scope.launch {
+            try {
+                val detail = client.fetchConversationDetail(conversationId)
+                if (detail != null && (!detail.assignedAgentId.isNullOrBlank() || detail.isEscalated == true)) {
+                    withContext(Dispatchers.Main) {
+                        if (!detail.assignedAgentId.isNullOrBlank()) {
+                            isHumanAssigned = true
+                        }
+                        if (detail.isEscalated == true) {
+                            isEscalated = true
+                        }
+                        updateEscalateButtonVisibility()
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
     }
 
     override fun onNewMessage(message: OmniChatMessage) {
@@ -449,6 +490,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
             applyDeliveryStatuses()
             adapter.notifyDataSetChanged()
             updateEscalateButtonVisibility()
+            client.activeConversationId?.let { checkAssignedAgent(it) }
         }
     }
 

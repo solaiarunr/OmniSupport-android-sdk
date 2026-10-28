@@ -229,6 +229,31 @@ class OmniChatClient private constructor() {
         httpClient.newCall(request).execute().close()
     }
 
+    suspend fun fetchConversationDetail(conversationId: String): OmniChatConversationDetail? = withContext(Dispatchers.IO) {
+        try {
+            val session = getOrCreateSession()
+            val url = "$apiBaseUrl/widget/conversations/$conversationId?visitorToken=${session.visitorToken}"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("Accept", "application/json")
+                .header("x-visitor-token", session.visitorToken)
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            if (!response.isSuccessful) return@withContext null
+
+            val body = response.body?.string() ?: return@withContext null
+            @kotlinx.serialization.Serializable
+            data class DetailWrapper(val success: Boolean, val data: OmniChatConversationDetail)
+
+            val decoded = json.decodeFromString<DetailWrapper>(body)
+            decoded.data
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun startPolling(conversationId: String) {
         stopPolling()
         pollJob = scope.launch {
