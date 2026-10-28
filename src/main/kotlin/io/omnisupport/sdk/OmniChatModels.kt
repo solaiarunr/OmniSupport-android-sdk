@@ -7,7 +7,8 @@ enum class OmniSenderType {
     CUSTOMER,
     AGENT,
     AI,
-    SYSTEM
+    SYSTEM,
+    COMPANY_ADMIN
 }
 
 @Serializable
@@ -57,6 +58,8 @@ data class OmniChatMessage(
     val id: String,
     val conversationId: String,
     val senderType: OmniSenderType,
+    val senderRole: String? = null,
+    val senderTitle: String? = null,
     val senderName: String,
     val content: String,
     val isInternalNote: Boolean? = false,
