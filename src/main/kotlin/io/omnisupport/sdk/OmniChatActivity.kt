@@ -621,23 +621,8 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
                     holder.messageText.setTextColor(Color.WHITE)
                     holder.timeLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
 
-                    // WhatsApp Ticks (Single -> Double -> Double Blue)
-                    holder.tickLabel.visibility = View.VISIBLE
-                    val status = item.deliveryStatus ?: OmniMessageDeliveryStatus.DELIVERED
-                    when (status) {
-                        OmniMessageDeliveryStatus.SENDING, OmniMessageDeliveryStatus.SENT -> {
-                            holder.tickLabel.text = "✓"
-                            holder.tickLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
-                        }
-                        OmniMessageDeliveryStatus.DELIVERED -> {
-                            holder.tickLabel.text = "✓✓"
-                            holder.tickLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
-                        }
-                        OmniMessageDeliveryStatus.READ -> {
-                            holder.tickLabel.text = "✓✓"
-                            holder.tickLabel.setTextColor(Color.parseColor("#34B7F1")) // WhatsApp Cyan Blue
-                        }
-                    }
+                    // Read status checkmarks hidden as requested
+                    holder.tickLabel.visibility = View.GONE
                 }
                 OmniSenderType.AGENT, OmniSenderType.AI -> {
                     holder.bubbleRow.gravity = Gravity.START
