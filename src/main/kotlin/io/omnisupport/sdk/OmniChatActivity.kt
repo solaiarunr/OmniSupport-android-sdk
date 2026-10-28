@@ -94,7 +94,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         // Header
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val brandColor = client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"
+            val brandColor = client.currentConfig?.primaryColor ?: client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"
             setBackgroundColor(Color.parseColor(brandColor))
             setPadding(dp(16f), dp(16f), dp(16f), dp(12f))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -118,7 +118,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
             typeface = Typeface.DEFAULT_BOLD
         }
         headerSubtitle = TextView(this).apply {
-            text = "● ${client.currentConfig?.appearance?.botName ?: "AI Assistant"} • Online"
+            text = "● ${client.currentConfig?.appearance?.botName ?: client.currentConfig?.botName ?: "AI Assistant"} • Online"
             setTextColor(Color.parseColor("#E0E7FF"))
             textSize = 12f
         }
@@ -261,7 +261,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
             id = "welcome_${System.currentTimeMillis()}",
             conversationId = "",
             senderType = OmniSenderType.AI,
-            senderName = client.currentConfig?.appearance?.botName ?: "AI Assistant",
+            senderName = client.currentConfig?.appearance?.botName ?: client.currentConfig?.botName ?: "AI Assistant",
             content = greeting,
             createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
         )
@@ -327,7 +327,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
                 id = "welcome_init",
                 conversationId = "",
                 senderType = OmniSenderType.AI,
-                senderName = client.currentConfig?.appearance?.botName ?: "AI Assistant",
+                senderName = client.currentConfig?.appearance?.botName ?: client.currentConfig?.botName ?: "AI Assistant",
                 content = greeting,
                 createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
             )
@@ -440,7 +440,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     }
 
     override fun onTypingChanged(isTyping: Boolean, senderName: String) {
-        headerSubtitle.text = if (isTyping) "$senderName is typing..." else "● ${client.currentConfig?.appearance?.botName ?: "AI Assistant"} • Online"
+        headerSubtitle.text = if (isTyping) "$senderName is typing..." else "● ${client.currentConfig?.appearance?.botName ?: client.currentConfig?.botName ?: "AI Assistant"} • Online"
     }
 
     override fun onStatusChanged(status: String) {
@@ -616,7 +616,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
                     holder.avatarView.visibility = View.GONE
                     holder.senderNameLabel.visibility = View.GONE
 
-                    val primary = client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"
+                    val primary = client.currentConfig?.primaryColor ?: client.currentConfig?.appearance?.primaryColor ?: "#4F46E5"
                     holder.bubbleCard.background = createBubbleDrawable(Color.parseColor(primary), isCustomer = true)
                     holder.messageText.setTextColor(Color.WHITE)
                     holder.timeLabel.setTextColor(Color.parseColor("#CCFFFFFF"))

@@ -28,7 +28,8 @@ data class OmniChatAppearance(
     val launcherText: String? = null,
     val showPoweredBy: Boolean? = null,
     val soundEnabled: Boolean? = null,
-    val greeting: String? = null
+    val greeting: String? = null,
+    val logoUrl: String? = null
 )
 
 @Serializable
@@ -40,6 +41,8 @@ data class OmniChatConfig(
     val welcomeMessage: String? = null,
     val greetingMessage: String? = null,
     val offlineMessage: String? = null,
+    val primaryColor: String? = null,
+    val botName: String? = null,
     val appearance: OmniChatAppearance? = null,
     val publicSdkKey: String? = null,
     val isEnabled: Boolean? = null
