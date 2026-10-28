@@ -34,6 +34,9 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     private var actionBarLayout: LinearLayout? = null
     private var isEscalated: Boolean = false
     private var isHumanAssigned: Boolean = false
+    private var isAgentOffline: Boolean = false
+    private var assignedAgentStatus: String? = null
+    private var offlineNoticeText: String = "Agents are currently offline"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -259,6 +262,8 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         client.startNewConversation()
         isEscalated = false
         isHumanAssigned = false
+        isAgentOffline = false
+        assignedAgentStatus = null
         val greeting = client.currentConfig?.greetingMessage
             ?: client.currentConfig?.welcomeMessage
             ?: client.currentConfig?.appearance?.greeting
@@ -275,6 +280,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         messages.add(welcome)
         adapter.notifyDataSetChanged()
         inputEditText.setText("")
+        updateHeaderSubtitle()
         updateEscalateButtonVisibility()
     }
 
@@ -436,12 +442,22 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
         actionBarLayout?.visibility = if (hasAssignedAgent) View.GONE else View.VISIBLE
     }
 
+    private fun updateHeaderSubtitle() {
+        val bot = client.currentConfig?.appearance?.botName ?: client.currentConfig?.botName ?: "AI Assistant"
+        if (isAgentOffline) {
+            headerSubtitle.text = if (assignedAgentStatus == "BUSY") "● Agent on Break • Away" else "● Agent • Offline"
+        } else if (isHumanAssigned) {
+            headerSubtitle.text = "● Support Specialist • Online"
+        } else {
+            headerSubtitle.text = "● $bot • Online"
+        }
+    }
+
     private fun checkAssignedAgent(conversationId: String) {
-        if (isHumanAssigned) return
         scope.launch {
             try {
                 val detail = client.fetchConversationDetail(conversationId)
-                if (detail != null && (!detail.assignedAgentId.isNullOrBlank() || detail.isEscalated == true)) {
+                if (detail != null) {
                     withContext(Dispatchers.Main) {
                         if (!detail.assignedAgentId.isNullOrBlank()) {
                             isHumanAssigned = true
@@ -449,6 +465,16 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
                         if (detail.isEscalated == true) {
                             isEscalated = true
                         }
+                        if (detail.isAgentOffline != null) {
+                            isAgentOffline = detail.isAgentOffline
+                        }
+                        if (!detail.assignedAgentStatus.isNullOrBlank()) {
+                            assignedAgentStatus = detail.assignedAgentStatus
+                        }
+                        if (!detail.offlineMessage.isNullOrBlank()) {
+                            offlineNoticeText = detail.offlineMessage
+                        }
+                        updateHeaderSubtitle()
                         updateEscalateButtonVisibility()
                     }
                 }

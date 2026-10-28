@@ -88,5 +88,9 @@ data class OmniChatConversationDetail(
     val ticketNumber: String? = null,
     val status: String? = null,
     val isEscalated: Boolean? = null,
-    val assignedAgentId: String? = null
+    val assignedAgentId: String? = null,
+    val assignedAgentStatus: String? = null,
+    val isAgentOffline: Boolean? = null,
+    val offlineMessage: String? = null
 )
+
