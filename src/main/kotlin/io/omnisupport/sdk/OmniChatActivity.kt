@@ -409,6 +409,7 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     }
 
     override fun onNewMessage(message: OmniChatMessage) {
+        if (message.isInternalNote == true) return
         if (!messages.any { it.id == message.id }) {
             messages.add(message)
             applyDeliveryStatuses()
@@ -418,8 +419,9 @@ class OmniChatActivity : AppCompatActivity(), OmniChatListener {
     }
 
     override fun onMessagesSynced(syncedMessages: List<OmniChatMessage>) {
+        val publicMessages = syncedMessages.filter { it.isInternalNote != true }
         var needsReload = false
-        for (serverMsg in syncedMessages) {
+        for (serverMsg in publicMessages) {
             val existing = messages.find { it.id == serverMsg.id }
             if (existing != null) {
                 val newStatus = serverMsg.deliveryStatus ?: if (serverMsg.isRead == true) OmniMessageDeliveryStatus.READ else OmniMessageDeliveryStatus.DELIVERED
